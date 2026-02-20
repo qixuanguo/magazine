@@ -28,7 +28,6 @@
       <section class="meta">
         <h1 class="title">43A CDO BMT Magazine</h1>
         <p class="subtitle">Swipe to flip, pinch to zoom, and zoom out to original size before flipping.</p>
-        <p class="subtitle">🦒</p>
 
         <section class="controls" aria-label="Flipbook controls">
           <button id="shareBtn" class="control-btn" type="button">share</button>
@@ -44,8 +43,16 @@
     </main>
 
     <div id="instructionPopup" class="instruction-popup" role="status" aria-live="polite">
-      <p class="instruction-text">Welcome to 43A CDO BMT Graduation Parade.<br>Zoom out to original size before flipping pages.</p>
-      <p class="instruction-countdown">Closing in <span id="instructionCountdown">10</span>s</p>
+      <button
+        id="instructionCloseBtn"
+        class="instruction-close"
+        type="button"
+        aria-label="Close instructions"
+      >
+        close
+      </button>
+      <p class="instruction-text">Zoom out to original size before flipping pages.</p>
+      <p class="instruction-countdown">Closing in <span id="instructionCountdown">5</span>s</p>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>

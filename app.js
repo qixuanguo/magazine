@@ -18,6 +18,7 @@ const shareBtn = document.getElementById("shareBtn");
 const downloadBtn = document.getElementById("downloadBtn");
 const instructionPopupEl = document.getElementById("instructionPopup");
 const instructionCountdownEl = document.getElementById("instructionCountdown");
+const instructionCloseBtnEl = document.getElementById("instructionCloseBtn");
 
 let pdfDoc = null;
 let pageFlip = null;
@@ -31,6 +32,7 @@ let rebuildTimerId = null;
 let orientationTimerId = null;
 let popupIntervalId = null;
 let pendingRebuild = false;
+let rebuildFailureCount = 0;
 
 const gestureState = {
   scale: 1,
@@ -50,21 +52,6 @@ const gestureState = {
 
 function setStatus(message) {
   statusEl.textContent = message;
-}
-
-function syncViewportMetrics() {
-  const viewportWidth = Math.round(window.visualViewport?.width || window.innerWidth || 0);
-  const viewportHeight = Math.round(window.visualViewport?.height || window.innerHeight || 0);
-  const orientation = viewportWidth > viewportHeight ? "landscape" : "portrait";
-
-  document.documentElement.style.setProperty("--phone-vw", `${viewportWidth}px`);
-  document.documentElement.style.setProperty("--phone-vh", `${viewportHeight}px`);
-
-  if (IS_COARSE_POINTER) {
-    document.documentElement.classList.add("is-phone");
-    document.documentElement.classList.toggle("is-landscape", orientation === "landscape");
-    document.documentElement.classList.toggle("is-portrait", orientation === "portrait");
-  }
 }
 
 function disableControls(disabled) {
@@ -366,9 +353,14 @@ async function rebuildFlipbook() {
       pageFlip.turnToPage(Math.min(previousDisplayIndex, pageFlip.getPageCount() - 1));
       setStatus(getStatusForDisplayIndex(pageFlip.getCurrentPageIndex()));
     }
+    rebuildFailureCount = 0;
   } catch (error) {
     console.error(error);
     setStatus("Could not render PDF. Check that assets/magazine.pdf exists.");
+    rebuildFailureCount += 1;
+    if (rebuildFailureCount <= 2) {
+      scheduleRebuild(420);
+    }
   } finally {
     disableControls(false);
     busy = false;
@@ -399,9 +391,17 @@ function scheduleRebuild(delay = 220) {
       return;
     }
 
-    syncViewportMetrics();
     rebuildFlipbook();
   }, delay);
+}
+
+function closeInstructionPopup() {
+  if (!instructionPopupEl) {
+    return;
+  }
+
+  clearInterval(popupIntervalId);
+  instructionPopupEl.classList.remove("is-visible");
 }
 
 function showInstructionPopup() {
@@ -409,7 +409,7 @@ function showInstructionPopup() {
     return;
   }
 
-  let remaining = 10;
+  let remaining = 5;
   instructionCountdownEl.textContent = String(remaining);
   instructionPopupEl.classList.add("is-visible");
 
@@ -419,8 +419,7 @@ function showInstructionPopup() {
     instructionCountdownEl.textContent = String(Math.max(remaining, 0));
 
     if (remaining <= 0) {
-      clearInterval(popupIntervalId);
-      instructionPopupEl.classList.remove("is-visible");
+      closeInstructionPopup();
     }
   }, 1000);
 }
@@ -577,33 +576,25 @@ downloadBtn.addEventListener("click", (event) => {
 });
 
 window.addEventListener("resize", () => {
-  syncViewportMetrics();
-  scheduleRebuild(230);
+  scheduleRebuild(250);
 });
 
 window.addEventListener("orientationchange", () => {
   resetGestureTransform();
-  syncViewportMetrics();
   clearTimeout(orientationTimerId);
-
-  if (IS_COARSE_POINTER) {
-    orientationTimerId = setTimeout(() => {
-      window.location.reload();
-    }, 160);
-    return;
-  }
-
   orientationTimerId = setTimeout(() => {
-    scheduleRebuild(130);
-  }, 130);
+    scheduleRebuild(140);
+    scheduleRebuild(520);
+  }, 140);
 });
 
 window.visualViewport?.addEventListener("resize", () => {
-  syncViewportMetrics();
-  scheduleRebuild(240);
+  scheduleRebuild(260);
 });
+
+instructionCloseBtnEl?.addEventListener("click", closeInstructionPopup);
+instructionPopupEl?.addEventListener("click", closeInstructionPopup);
 
 initTouchGestures();
 showInstructionPopup();
-syncViewportMetrics();
 loadPdf();
