@@ -17,6 +17,7 @@ html,
 body {
   margin: 0;
   min-height: 100%;
+  background: #090b10;
 }
 
 body {
@@ -30,6 +31,7 @@ body {
 
 .app {
   max-width: 1200px;
+  width: 100%;
   margin: 0 auto;
   padding: 0.9rem;
 }
@@ -150,6 +152,41 @@ body {
   transform: translateY(0);
 }
 
+.instruction-popup {
+  position: fixed;
+  left: 50%;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  transform: translate(-50%, 12px);
+  width: min(92vw, 440px);
+  border: 1px solid #34425f;
+  border-radius: 12px;
+  background: rgba(12, 18, 30, 0.96);
+  color: var(--ink);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+  padding: 0.78rem 0.9rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease;
+  z-index: 50;
+}
+
+.instruction-popup.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.instruction-text {
+  margin: 0;
+  font-size: 0.93rem;
+  line-height: 1.35;
+}
+
+.instruction-countdown {
+  margin: 0.34rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 @media (max-width: 760px) {
   .app {
     padding: 0.72rem;
@@ -181,15 +218,39 @@ body {
 }
 
 @media (max-width: 900px) and (orientation: landscape) {
+  html,
+  body {
+    width: 100%;
+    overflow-x: hidden;
+  }
+
   .app {
-    padding: 0.58rem;
+    max-width: none;
+    width: 100vw;
+    padding: 0;
+  }
+
+  .status {
+    padding: 0.48rem 0.72rem 0;
+  }
+
+  .viewer-wrap {
+    gap: 0;
   }
 
   .zoom-surface {
-    height: 84vh;
+    height: calc(100dvh - 2rem);
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
   }
 
   .meta {
-    margin-top: 1.2rem;
+    margin-top: 1rem;
+    padding: 0 0.7rem 0.8rem;
+  }
+
+  .instruction-popup {
+    bottom: 0.72rem;
   }
 }

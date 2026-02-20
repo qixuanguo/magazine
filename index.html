@@ -27,7 +27,7 @@
 
       <section class="meta">
         <h1 class="title">43A CDO BMT Magazine</h1>
-        <p class="subtitle">Swipe to flip, pinch to zoom, and rotate your phone for landscape view.</p>
+        <p class="subtitle">Swipe to flip, pinch to zoom, and zoom out to original size before flipping.</p>
 
         <section class="controls" aria-label="Flipbook controls">
           <button id="shareBtn" class="control-btn" type="button">share</button>
@@ -41,6 +41,11 @@
         </section>
       </section>
     </main>
+
+    <div id="instructionPopup" class="instruction-popup" role="status" aria-live="polite">
+      <p class="instruction-text">Zoom out to original size before flipping pages.</p>
+      <p class="instruction-countdown">Closing in <span id="instructionCountdown">10</span>s</p>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
     <script type="module" src="app.js"></script>

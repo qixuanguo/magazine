@@ -16,6 +16,8 @@ const zoomSurfaceEl = document.getElementById("zoomSurface");
 const statusEl = document.getElementById("status");
 const shareBtn = document.getElementById("shareBtn");
 const downloadBtn = document.getElementById("downloadBtn");
+const instructionPopupEl = document.getElementById("instructionPopup");
+const instructionCountdownEl = document.getElementById("instructionCountdown");
 
 let pdfDoc = null;
 let pageFlip = null;
@@ -25,6 +27,10 @@ let totalBookPages = 0;
 let pageWidth = 595;
 let pageHeight = 842;
 let pageNumberMap = [];
+let rebuildTimerId = null;
+let orientationTimerId = null;
+let popupIntervalId = null;
+let pendingRebuild = false;
 
 const gestureState = {
   scale: 1,
@@ -64,6 +70,9 @@ function clamp(value, min, max) {
 
 function getRenderDensity() {
   const dpr = window.devicePixelRatio || 1;
+  if (IS_COARSE_POINTER) {
+    return clamp(dpr * 1.2, 1.6, 2.6);
+  }
   return clamp(dpr * RENDER_DENSITY_MULTIPLIER, MIN_RENDER_DENSITY, MAX_RENDER_DENSITY);
 }
 
@@ -202,39 +211,42 @@ async function renderBookPages() {
 
   for (let pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber += 1) {
     const pdfPage = await pdfDoc.getPage(pageNumber);
-    const rendered = await renderSourceCanvas(pdfPage);
+    try {
+      const rendered = await renderSourceCanvas(pdfPage);
 
-    const forcePortrait = pageNumber === 1 || pageNumber === pdfDoc.numPages;
-    const isLandscapeSource =
-      !forcePortrait && rendered.sourceWidth > rendered.sourceHeight * LANDSCAPE_RATIO;
+      const forcePortrait = pageNumber === 1 || pageNumber === pdfDoc.numPages;
+      const isLandscapeSource =
+        !forcePortrait && rendered.sourceWidth > rendered.sourceHeight * LANDSCAPE_RATIO;
 
-    if (isLandscapeSource) {
-      const [leftCanvas, rightCanvas] = splitLandscapeToA4Canvases(rendered.canvas);
-      spreadCount += 1;
+      if (isLandscapeSource) {
+        const [leftCanvas, rightCanvas] = splitLandscapeToA4Canvases(rendered.canvas);
+        spreadCount += 1;
+
+        physicalPages.push({
+          element: createPageElementFromCanvas(leftCanvas),
+          width: rendered.displayWidth / 2,
+          height: rendered.displayHeight
+        });
+        physicalPageMap.push(physicalPageMap.length + 1);
+
+        physicalPages.push({
+          element: createPageElementFromCanvas(rightCanvas),
+          width: rendered.displayWidth / 2,
+          height: rendered.displayHeight
+        });
+        physicalPageMap.push(physicalPageMap.length + 1);
+        continue;
+      }
 
       physicalPages.push({
-        element: createPageElementFromCanvas(leftCanvas),
-        width: rendered.displayWidth / 2,
+        element: createPageElementFromCanvas(rendered.canvas),
+        width: rendered.displayWidth,
         height: rendered.displayHeight
       });
       physicalPageMap.push(physicalPageMap.length + 1);
-
-      physicalPages.push({
-        element: createPageElementFromCanvas(rightCanvas),
-        width: rendered.displayWidth / 2,
-        height: rendered.displayHeight
-      });
-      physicalPageMap.push(physicalPageMap.length + 1);
-
-      continue;
+    } finally {
+      pdfPage.cleanup();
     }
-
-    physicalPages.push({
-      element: createPageElementFromCanvas(rendered.canvas),
-      width: rendered.displayWidth,
-      height: rendered.displayHeight
-    });
-    physicalPageMap.push(physicalPageMap.length + 1);
   }
 
   if (!physicalPages.length) {
@@ -345,7 +357,56 @@ async function rebuildFlipbook() {
   } finally {
     disableControls(false);
     busy = false;
+    if (pendingRebuild) {
+      pendingRebuild = false;
+      scheduleRebuild(90);
+    }
   }
+}
+
+function scheduleRebuild(delay = 220) {
+  if (!pdfDoc) {
+    return;
+  }
+
+  clearTimeout(rebuildTimerId);
+  rebuildTimerId = setTimeout(() => {
+    const width = zoomSurfaceEl.clientWidth;
+    const height = zoomSurfaceEl.clientHeight;
+
+    if (width < 160 || height < 160) {
+      scheduleRebuild(160);
+      return;
+    }
+
+    if (busy) {
+      pendingRebuild = true;
+      return;
+    }
+
+    rebuildFlipbook();
+  }, delay);
+}
+
+function showInstructionPopup() {
+  if (!instructionPopupEl || !instructionCountdownEl) {
+    return;
+  }
+
+  let remaining = 10;
+  instructionCountdownEl.textContent = String(remaining);
+  instructionPopupEl.classList.add("is-visible");
+
+  clearInterval(popupIntervalId);
+  popupIntervalId = setInterval(() => {
+    remaining -= 1;
+    instructionCountdownEl.textContent = String(Math.max(remaining, 0));
+
+    if (remaining <= 0) {
+      clearInterval(popupIntervalId);
+      instructionPopupEl.classList.remove("is-visible");
+    }
+  }, 1000);
 }
 
 function initTouchGestures() {
@@ -500,15 +561,21 @@ downloadBtn.addEventListener("click", (event) => {
 });
 
 window.addEventListener("resize", () => {
-  if (!pdfDoc || busy) {
-    return;
-  }
+  scheduleRebuild(230);
+});
 
-  clearTimeout(window.__resizeTimer);
-  window.__resizeTimer = setTimeout(() => {
-    rebuildFlipbook();
-  }, 220);
+window.addEventListener("orientationchange", () => {
+  resetGestureTransform();
+  clearTimeout(orientationTimerId);
+  orientationTimerId = setTimeout(() => {
+    scheduleRebuild(130);
+  }, 130);
+});
+
+window.visualViewport?.addEventListener("resize", () => {
+  scheduleRebuild(240);
 });
 
 initTouchGestures();
+showInstructionPopup();
 loadPdf();
