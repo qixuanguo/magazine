@@ -5,9 +5,6 @@ const LANDSCAPE_RATIO = 1.08;
 const MIN_GESTURE_SCALE = 1;
 const MAX_GESTURE_SCALE = 3;
 const ZOOM_LOCK_THRESHOLD = 1.03;
-const MIN_RENDER_DENSITY = 2;
-const MAX_RENDER_DENSITY = 4;
-const RENDER_DENSITY_MULTIPLIER = 1.55;
 const PAGE_BG_COLOR = "#0f1624";
 const IS_COARSE_POINTER = window.matchMedia("(pointer: coarse)").matches;
 
@@ -29,11 +26,7 @@ let totalBookPages = 0;
 let pageWidth = 595;
 let pageHeight = 842;
 let pageNumberMap = [];
-let rebuildTimerId = null;
-let orientationTimerId = null;
 let popupIntervalId = null;
-let pendingRebuild = false;
-let rebuildFailureCount = 0;
 let fullscreenFallbackActive = false;
 
 const gestureState = {
@@ -74,13 +67,10 @@ function clamp(value, min, max) {
 
 function getRenderDensity() {
   const dpr = window.devicePixelRatio || 1;
-  if (fullscreenFallbackActive && IS_COARSE_POINTER) {
-    return clamp(dpr * 1.0, 1.3, 2.2);
-  }
   if (IS_COARSE_POINTER) {
-    return clamp(dpr * 1.2, 1.6, 2.6);
+    return clamp(dpr * 0.95, 1.2, 1.9);
   }
-  return clamp(dpr * RENDER_DENSITY_MULTIPLIER, MIN_RENDER_DENSITY, MAX_RENDER_DENSITY);
+  return clamp(dpr * 1.1, 1.4, 2.2);
 }
 
 function getTouchDistance(touchA, touchB) {
@@ -186,7 +176,7 @@ function splitLandscapeToA4Canvases(sourceCanvas) {
 
 async function renderSourceCanvas(pdfPage) {
   const sourceViewport = pdfPage.getViewport({ scale: 1 });
-  const targetDisplayHeight = Math.max(440, zoomSurfaceEl.clientHeight - 20);
+  const targetDisplayHeight = clamp(zoomSurfaceEl.clientHeight - 20, 420, 720);
   const displayScale = targetDisplayHeight / sourceViewport.height;
   const displayViewport = pdfPage.getViewport({ scale: displayScale });
 
@@ -358,46 +348,13 @@ async function rebuildFlipbook() {
       pageFlip.turnToPage(Math.min(previousDisplayIndex, pageFlip.getPageCount() - 1));
       setStatus(getStatusForDisplayIndex(pageFlip.getCurrentPageIndex()));
     }
-    rebuildFailureCount = 0;
   } catch (error) {
     console.error(error);
     setStatus("Could not render PDF. Check that assets/magazine.pdf exists.");
-    rebuildFailureCount += 1;
-    if (rebuildFailureCount <= 2) {
-      scheduleRebuild(420);
-    }
   } finally {
     disableControls(false);
     busy = false;
-    if (pendingRebuild) {
-      pendingRebuild = false;
-      scheduleRebuild(90);
-    }
   }
-}
-
-function scheduleRebuild(delay = 220) {
-  if (!pdfDoc) {
-    return;
-  }
-
-  clearTimeout(rebuildTimerId);
-  rebuildTimerId = setTimeout(() => {
-    const width = zoomSurfaceEl.clientWidth;
-    const height = zoomSurfaceEl.clientHeight;
-
-    if (width < 160 || height < 160) {
-      scheduleRebuild(160);
-      return;
-    }
-
-    if (busy) {
-      pendingRebuild = true;
-      return;
-    }
-
-    rebuildFlipbook();
-  }, delay);
 }
 
 function closeInstructionPopup() {
@@ -417,18 +374,32 @@ function setFallbackFullscreen(active) {
   fullscreenBtn.textContent = active ? "exit fullscreen" : "fullscreen";
 }
 
+function refreshFlipbookLayout() {
+  if (!pageFlip) {
+    return;
+  }
+
+  try {
+    if (typeof pageFlip.update === "function") {
+      pageFlip.update();
+    }
+  } catch (error) {
+    console.warn("Flipbook layout refresh failed.", error);
+  }
+}
+
 function toggleViewerFullscreen() {
   if (fullscreenFallbackActive) {
     setFallbackFullscreen(false);
-    scheduleRebuild(100);
-    scheduleRebuild(420);
+    refreshFlipbookLayout();
+    setTimeout(refreshFlipbookLayout, 140);
     return;
   }
 
   // Always use stable in-page fullscreen to avoid mobile blank-screen issues.
   setFallbackFullscreen(true);
-  scheduleRebuild(120);
-  scheduleRebuild(460);
+  refreshFlipbookLayout();
+  setTimeout(refreshFlipbookLayout, 160);
 }
 
 function showInstructionPopup() {
@@ -489,6 +460,17 @@ function preventPageZoomOutsideViewer() {
     "gesturechange",
     (event) => {
       if (!isInsideViewer(event)) {
+        event.preventDefault();
+      }
+    },
+    { passive: false, capture: true }
+  );
+
+  // Desktop/browser zoom gesture fallback (e.g. ctrl + wheel).
+  document.addEventListener(
+    "wheel",
+    (event) => {
+      if (event.ctrlKey && !isInsideViewer(event)) {
         event.preventDefault();
       }
     },
@@ -648,21 +630,17 @@ downloadBtn.addEventListener("click", (event) => {
 });
 
 window.addEventListener("resize", () => {
-  scheduleRebuild(250);
+  refreshFlipbookLayout();
 });
 
 window.addEventListener("orientationchange", () => {
   resetGestureTransform();
-  clearTimeout(orientationTimerId);
-  setFallbackFullscreen(false);
-  orientationTimerId = setTimeout(() => {
-    scheduleRebuild(140);
-    scheduleRebuild(520);
-  }, 140);
+  setTimeout(refreshFlipbookLayout, 120);
+  setTimeout(refreshFlipbookLayout, 520);
 });
 
 window.visualViewport?.addEventListener("resize", () => {
-  scheduleRebuild(260);
+  refreshFlipbookLayout();
 });
 
 instructionCloseBtnEl?.addEventListener("click", closeInstructionPopup);
