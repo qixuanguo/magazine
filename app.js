@@ -16,6 +16,7 @@ const zoomSurfaceEl = document.getElementById("zoomSurface");
 const statusEl = document.getElementById("status");
 const shareBtn = document.getElementById("shareBtn");
 const downloadBtn = document.getElementById("downloadBtn");
+const fullscreenBtn = document.getElementById("fullscreenBtn");
 const instructionPopupEl = document.getElementById("instructionPopup");
 const instructionCountdownEl = document.getElementById("instructionCountdown");
 const instructionCloseBtnEl = document.getElementById("instructionCloseBtn");
@@ -33,6 +34,7 @@ let orientationTimerId = null;
 let popupIntervalId = null;
 let pendingRebuild = false;
 let rebuildFailureCount = 0;
+let fullscreenFallbackActive = false;
 
 const gestureState = {
   scale: 1,
@@ -55,7 +57,7 @@ function setStatus(message) {
 }
 
 function disableControls(disabled) {
-  [shareBtn, downloadBtn].forEach((el) => {
+  [shareBtn, downloadBtn, fullscreenBtn].forEach((el) => {
     el.toggleAttribute("disabled", disabled);
 
     if (el.tagName === "A") {
@@ -404,6 +406,80 @@ function closeInstructionPopup() {
   instructionPopupEl.classList.remove("is-visible");
 }
 
+function canUseElementFullscreen() {
+  return Boolean(
+    zoomSurfaceEl.requestFullscreen ||
+      zoomSurfaceEl.webkitRequestFullscreen ||
+      zoomSurfaceEl.msRequestFullscreen
+  );
+}
+
+async function requestViewerFullscreen() {
+  const request =
+    zoomSurfaceEl.requestFullscreen ||
+    zoomSurfaceEl.webkitRequestFullscreen ||
+    zoomSurfaceEl.msRequestFullscreen;
+
+  if (!request) {
+    throw new Error("Fullscreen API unavailable.");
+  }
+
+  await request.call(zoomSurfaceEl);
+}
+
+async function exitViewerFullscreen() {
+  const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+  if (!exit) {
+    return;
+  }
+  await exit.call(document);
+}
+
+function setFallbackFullscreen(active) {
+  fullscreenFallbackActive = active;
+  zoomSurfaceEl.classList.toggle("is-fullscreen-fallback", active);
+  document.body.classList.toggle("has-fullscreen-fallback", active);
+  fullscreenBtn.textContent = active ? "exit fullscreen" : "fullscreen";
+}
+
+function isViewerFullscreenActive() {
+  return (
+    Boolean(document.fullscreenElement) ||
+    Boolean(document.webkitFullscreenElement) ||
+    Boolean(document.msFullscreenElement) ||
+    fullscreenFallbackActive
+  );
+}
+
+async function toggleViewerFullscreen() {
+  if (fullscreenFallbackActive) {
+    setFallbackFullscreen(false);
+    scheduleRebuild(100);
+    return;
+  }
+
+  if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+    await exitViewerFullscreen();
+    fullscreenBtn.textContent = "fullscreen";
+    scheduleRebuild(100);
+    return;
+  }
+
+  if (canUseElementFullscreen()) {
+    try {
+      await requestViewerFullscreen();
+      fullscreenBtn.textContent = "exit fullscreen";
+      scheduleRebuild(120);
+      return;
+    } catch (error) {
+      console.warn("Native fullscreen failed, using fallback.", error);
+    }
+  }
+
+  setFallbackFullscreen(true);
+  scheduleRebuild(120);
+}
+
 function showInstructionPopup() {
   if (!instructionPopupEl || !instructionCountdownEl) {
     return;
@@ -422,6 +498,51 @@ function showInstructionPopup() {
       closeInstructionPopup();
     }
   }, 1000);
+}
+
+function preventPageZoomOutsideViewer() {
+  const isInsideViewer = (event) => zoomSurfaceEl.contains(event.target);
+
+  document.addEventListener(
+    "touchstart",
+    (event) => {
+      if (event.touches.length > 1 && !isInsideViewer(event)) {
+        event.preventDefault();
+      }
+    },
+    { passive: false, capture: true }
+  );
+
+  document.addEventListener(
+    "touchmove",
+    (event) => {
+      if (event.touches.length > 1 && !isInsideViewer(event)) {
+        event.preventDefault();
+      }
+    },
+    { passive: false, capture: true }
+  );
+
+  // iOS Safari pinch events.
+  document.addEventListener(
+    "gesturestart",
+    (event) => {
+      if (!isInsideViewer(event)) {
+        event.preventDefault();
+      }
+    },
+    { passive: false, capture: true }
+  );
+
+  document.addEventListener(
+    "gesturechange",
+    (event) => {
+      if (!isInsideViewer(event)) {
+        event.preventDefault();
+      }
+    },
+    { passive: false, capture: true }
+  );
 }
 
 function initTouchGestures() {
@@ -582,6 +703,7 @@ window.addEventListener("resize", () => {
 window.addEventListener("orientationchange", () => {
   resetGestureTransform();
   clearTimeout(orientationTimerId);
+  setFallbackFullscreen(false);
   orientationTimerId = setTimeout(() => {
     scheduleRebuild(140);
     scheduleRebuild(520);
@@ -594,7 +716,26 @@ window.visualViewport?.addEventListener("resize", () => {
 
 instructionCloseBtnEl?.addEventListener("click", closeInstructionPopup);
 instructionPopupEl?.addEventListener("click", closeInstructionPopup);
+fullscreenBtn?.addEventListener("click", toggleViewerFullscreen);
+
+document.addEventListener("fullscreenchange", () => {
+  if (!isViewerFullscreenActive()) {
+    fullscreenBtn.textContent = "fullscreen";
+  } else {
+    fullscreenBtn.textContent = "exit fullscreen";
+  }
+  scheduleRebuild(100);
+});
+document.addEventListener("webkitfullscreenchange", () => {
+  if (!isViewerFullscreenActive()) {
+    fullscreenBtn.textContent = "fullscreen";
+  } else {
+    fullscreenBtn.textContent = "exit fullscreen";
+  }
+  scheduleRebuild(100);
+});
 
 initTouchGestures();
+preventPageZoomOutsideViewer();
 showInstructionPopup();
 loadPdf();
