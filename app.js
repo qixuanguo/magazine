@@ -74,6 +74,9 @@ function clamp(value, min, max) {
 
 function getRenderDensity() {
   const dpr = window.devicePixelRatio || 1;
+  if (fullscreenFallbackActive && IS_COARSE_POINTER) {
+    return clamp(dpr * 1.0, 1.3, 2.2);
+  }
   if (IS_COARSE_POINTER) {
     return clamp(dpr * 1.2, 1.6, 2.6);
   }
@@ -406,78 +409,26 @@ function closeInstructionPopup() {
   instructionPopupEl.classList.remove("is-visible");
 }
 
-function canUseElementFullscreen() {
-  return Boolean(
-    zoomSurfaceEl.requestFullscreen ||
-      zoomSurfaceEl.webkitRequestFullscreen ||
-      zoomSurfaceEl.msRequestFullscreen
-  );
-}
-
-async function requestViewerFullscreen() {
-  const request =
-    zoomSurfaceEl.requestFullscreen ||
-    zoomSurfaceEl.webkitRequestFullscreen ||
-    zoomSurfaceEl.msRequestFullscreen;
-
-  if (!request) {
-    throw new Error("Fullscreen API unavailable.");
-  }
-
-  await request.call(zoomSurfaceEl);
-}
-
-async function exitViewerFullscreen() {
-  const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
-  if (!exit) {
-    return;
-  }
-  await exit.call(document);
-}
-
 function setFallbackFullscreen(active) {
   fullscreenFallbackActive = active;
   zoomSurfaceEl.classList.toggle("is-fullscreen-fallback", active);
   document.body.classList.toggle("has-fullscreen-fallback", active);
+  fullscreenBtn.setAttribute("aria-pressed", String(active));
   fullscreenBtn.textContent = active ? "exit fullscreen" : "fullscreen";
 }
 
-function isViewerFullscreenActive() {
-  return (
-    Boolean(document.fullscreenElement) ||
-    Boolean(document.webkitFullscreenElement) ||
-    Boolean(document.msFullscreenElement) ||
-    fullscreenFallbackActive
-  );
-}
-
-async function toggleViewerFullscreen() {
+function toggleViewerFullscreen() {
   if (fullscreenFallbackActive) {
     setFallbackFullscreen(false);
     scheduleRebuild(100);
+    scheduleRebuild(420);
     return;
   }
 
-  if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
-    await exitViewerFullscreen();
-    fullscreenBtn.textContent = "fullscreen";
-    scheduleRebuild(100);
-    return;
-  }
-
-  if (canUseElementFullscreen()) {
-    try {
-      await requestViewerFullscreen();
-      fullscreenBtn.textContent = "exit fullscreen";
-      scheduleRebuild(120);
-      return;
-    } catch (error) {
-      console.warn("Native fullscreen failed, using fallback.", error);
-    }
-  }
-
+  // Always use stable in-page fullscreen to avoid mobile blank-screen issues.
   setFallbackFullscreen(true);
   scheduleRebuild(120);
+  scheduleRebuild(460);
 }
 
 function showInstructionPopup() {
@@ -717,23 +668,6 @@ window.visualViewport?.addEventListener("resize", () => {
 instructionCloseBtnEl?.addEventListener("click", closeInstructionPopup);
 instructionPopupEl?.addEventListener("click", closeInstructionPopup);
 fullscreenBtn?.addEventListener("click", toggleViewerFullscreen);
-
-document.addEventListener("fullscreenchange", () => {
-  if (!isViewerFullscreenActive()) {
-    fullscreenBtn.textContent = "fullscreen";
-  } else {
-    fullscreenBtn.textContent = "exit fullscreen";
-  }
-  scheduleRebuild(100);
-});
-document.addEventListener("webkitfullscreenchange", () => {
-  if (!isViewerFullscreenActive()) {
-    fullscreenBtn.textContent = "fullscreen";
-  } else {
-    fullscreenBtn.textContent = "exit fullscreen";
-  }
-  scheduleRebuild(100);
-});
 
 initTouchGestures();
 preventPageZoomOutsideViewer();
