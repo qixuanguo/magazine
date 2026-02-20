@@ -1,185 +1,191 @@
-/* ============================
-   1-LINE EDIT (optional):
-   Keep the filename the same and you won't need to touch this.
-   ============================ */
-const PDF_URL = "./assets/magazine.pdf";
+import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.76/pdf.min.mjs";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.js";
+const PDF_URL = "assets/magazine.pdf";
+const MIN_ZOOM = 0.6;
+const MAX_ZOOM = 2.6;
+const ZOOM_STEP = 0.2;
 
-const els = {
-  status: document.getElementById("status"),
-  bookWrap: document.getElementById("bookWrap"),
-  book: document.getElementById("book"),
+const flipbookEl = document.getElementById("flipbook");
+const statusEl = document.getElementById("status");
+const prevBtn = document.getElementById("prevBtn");
+const nextBtn = document.getElementById("nextBtn");
+const zoomInBtn = document.getElementById("zoomInBtn");
+const zoomOutBtn = document.getElementById("zoomOutBtn");
+const fullscreenBtn = document.getElementById("fullscreenBtn");
+const shareBtn = document.getElementById("shareBtn");
+const downloadBtn = document.getElementById("downloadBtn");
 
-  prevBtn: document.getElementById("prevBtn"),
-  nextBtn: document.getElementById("nextBtn"),
-  zoomInBtn: document.getElementById("zoomInBtn"),
-  zoomOutBtn: document.getElementById("zoomOutBtn"),
-
-  fullscreenBtn: document.getElementById("fullscreenBtn"),
-  shareBtn: document.getElementById("shareBtn"),
-  downloadBtn: document.getElementById("downloadBtn"),
-
-  pageNow: document.getElementById("pageNow"),
-  pageTotal: document.getElementById("pageTotal"),
-};
-
-let pageFlip = null;
 let pdfDoc = null;
-let zoom = 1.0;
+let pageFlip = null;
+let zoom = 1;
+let busy = false;
 
-function setStatus(msg) {
-  els.status.textContent = msg;
-  els.status.hidden = false;
-  els.bookWrap.hidden = true;
+function setStatus(message) {
+  statusEl.textContent = message;
 }
 
-function showBook() {
-  els.status.hidden = true;
-  els.bookWrap.hidden = false;
+function disableControls(disabled) {
+  [prevBtn, nextBtn, zoomInBtn, zoomOutBtn, fullscreenBtn, shareBtn, downloadBtn].forEach((el) => {
+    el.toggleAttribute("disabled", disabled);
+    if (el.tagName === "A") {
+      el.setAttribute("aria-disabled", String(disabled));
+      el.style.pointerEvents = disabled ? "none" : "auto";
+      el.style.opacity = disabled ? "0.65" : "1";
+    }
+  });
 }
 
-function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-
-function isFullscreen() {
-  return !!document.fullscreenElement;
-}
-
-async function toggleFullscreen() {
-  try {
-    const target = els.bookWrap;
-    if (!isFullscreen()) await target.requestFullscreen();
-    else await document.exitFullscreen();
-  } catch (e) {
-    console.warn("Fullscreen not available:", e);
-  }
-}
-
-function updateFullscreenIcon() {
-  els.fullscreenBtn.textContent = isFullscreen() ? "🞬" : "⛶";
-}
-
-async function renderPdfToCanvases(pdf, renderScale) {
-  const total = pdf.numPages;
-  els.book.innerHTML = "";
-
-  for (let i = 1; i <= total; i++) {
-    setStatus(`Rendering page ${i} / ${total}…`);
-
-    const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: renderScale });
-
-    const canvas = document.createElement("canvas");
-    canvas.className = "pageCanvas";
-    canvas.width = Math.floor(viewport.width);
-    canvas.height = Math.floor(viewport.height);
-
-    const ctx = canvas.getContext("2d", { alpha: false });
-    await page.render({ canvasContext: ctx, viewport }).promise;
-
-    const pageDiv = document.createElement("div");
-    pageDiv.appendChild(canvas);
-    els.book.appendChild(pageDiv);
-  }
-}
-
-function initFlipbook(totalPages) {
+function clearFlipbook() {
   if (pageFlip) {
-    try { pageFlip.destroy(); } catch {}
+    pageFlip.destroy();
     pageFlip = null;
   }
-
-  const container = els.book;
-  const isMobile = window.matchMedia("(max-width: 740px)").matches;
-
-  pageFlip = new St.PageFlip(container, {
-    width: 550,
-    height: 700,
-    size: "stretch",
-    minWidth: 320,
-    maxWidth: 2000,
-    minHeight: 420,
-    maxHeight: 2000,
-    showCover: true,
-    mobileScrollSupport: true,
-    useMouseEvents: true,
-    swipeDistance: 30,
-    startPage: 0,
-    drawShadow: true,
-    flippingTime: 700,
-    maxShadowOpacity: 0.35,
-    autoSize: true,
-    usePortrait: isMobile,
-  });
-
-  pageFlip.loadFromHTML(container.querySelectorAll(":scope > div"));
-
-  els.pageTotal.textContent = String(totalPages);
-  els.pageNow.textContent = "1";
-
-  pageFlip.on("flip", (e) => {
-    els.pageNow.textContent = String(e.data + 1);
-  });
-
-  els.prevBtn.onclick = () => pageFlip.flipPrev();
-  els.nextBtn.onclick = () => pageFlip.flipNext();
-
-  window.onkeydown = (e) => {
-    if (!pageFlip) return;
-    if (e.key === "ArrowLeft") pageFlip.flipPrev();
-    if (e.key === "ArrowRight") pageFlip.flipNext();
-  };
-
-  window.addEventListener("resize", () => {
-    if (!pageFlip) return;
-    const mobileNow = window.matchMedia("(max-width: 740px)").matches;
-    pageFlip.getSettings().usePortrait = mobileNow;
-    pageFlip.update();
-  });
-
-  showBook();
+  flipbookEl.innerHTML = "";
 }
 
-async function load() {
+async function renderPdfPages() {
+  const pages = [];
+  const targetHeight = Math.max(640, flipbookEl.clientHeight - 20);
+
+  for (let i = 1; i <= pdfDoc.numPages; i += 1) {
+    const page = await pdfDoc.getPage(i);
+    const viewport = page.getViewport({ scale: 1 });
+    const scale = (targetHeight / viewport.height) * zoom;
+    const scaledViewport = page.getViewport({ scale });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.floor(scaledViewport.width);
+    canvas.height = Math.floor(scaledViewport.height);
+
+    const context = canvas.getContext("2d", { alpha: false });
+    await page.render({ canvasContext: context, viewport: scaledViewport }).promise;
+
+    const pageEl = document.createElement("div");
+    pageEl.className = "flip-page";
+    pageEl.appendChild(canvas);
+    pages.push(pageEl);
+  }
+
+  return pages;
+}
+
+function initFlipbook(pages) {
+  const firstCanvas = pages[0]?.querySelector("canvas");
+  if (!firstCanvas) {
+    throw new Error("Failed to render PDF pages.");
+  }
+
+  const width = firstCanvas.width;
+  const height = firstCanvas.height;
+
+  pageFlip = new St.PageFlip(flipbookEl, {
+    width,
+    height,
+    size: "stretch",
+    minWidth: 280,
+    minHeight: 320,
+    maxShadowOpacity: 0.28,
+    showCover: true,
+    mobileScrollSupport: false,
+    usePortrait: true,
+    startPage: 0
+  });
+
+  pageFlip.loadFromHTML(pages);
+  setStatus(`Page 1 / ${pdfDoc.numPages} | Zoom ${Math.round(zoom * 100)}%`);
+
+  pageFlip.on("flip", (event) => {
+    const current = event.data + 1;
+    setStatus(`Page ${current} / ${pdfDoc.numPages} | Zoom ${Math.round(zoom * 100)}%`);
+  });
+}
+
+async function rebuildFlipbook() {
+  if (busy || !pdfDoc) {
+    return;
+  }
+  busy = true;
+  disableControls(true);
+  setStatus(`Rendering pages at ${Math.round(zoom * 100)}%…`);
+
   try {
-    setStatus("Loading magazine…");
+    const currentPageIndex = pageFlip?.getCurrentPageIndex() ?? 0;
+    clearFlipbook();
+    const pages = await renderPdfPages();
+    initFlipbook(pages);
 
-    pdfDoc = await pdfjsLib.getDocument({
-      url: PDF_URL,
-      withCredentials: false,
-    }).promise;
-
-    // download points directly at the PDF
-    els.downloadBtn.href = PDF_URL;
-
-    await renderPdfToCanvases(pdfDoc, zoom);
-    initFlipbook(pdfDoc.numPages);
-  } catch (err) {
-    console.error(err);
-    setStatus("Could not load the PDF. Make sure ./assets/magazine.pdf exists (case-sensitive) and is a valid PDF.");
+    if (currentPageIndex > 0) {
+      pageFlip.turnToPage(Math.min(currentPageIndex, pdfDoc.numPages - 1));
+    }
+  } catch (error) {
+    console.error(error);
+    setStatus("Could not render PDF. Check that assets/magazine.pdf exists.");
+  } finally {
+    disableControls(false);
+    busy = false;
   }
 }
 
-async function rerenderAt(newZoom) {
-  if (!pdfDoc) return;
-  zoom = clamp(newZoom, 0.75, 1.75);
-  await renderPdfToCanvases(pdfDoc, zoom);
-  initFlipbook(pdfDoc.numPages);
+async function loadPdf() {
+  disableControls(true);
+
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.76/pdf.worker.min.mjs";
+
+    const loadingTask = pdfjsLib.getDocument(PDF_URL);
+    pdfDoc = await loadingTask.promise;
+    await rebuildFlipbook();
+  } catch (error) {
+    console.error(error);
+    setStatus("Failed to load PDF.js or magazine.pdf.");
+    disableControls(false);
+  }
 }
 
-els.zoomInBtn.onclick = () => rerenderAt(zoom + 0.15);
-els.zoomOutBtn.onclick = () => rerenderAt(zoom - 0.15);
+prevBtn.addEventListener("click", () => {
+  pageFlip?.flipPrev();
+});
 
-els.fullscreenBtn.onclick = () => toggleFullscreen();
-document.addEventListener("fullscreenchange", updateFullscreenIcon);
-updateFullscreenIcon();
+nextBtn.addEventListener("click", () => {
+  pageFlip?.flipNext();
+});
 
-els.shareBtn.onclick = async () => {
+zoomInBtn.addEventListener("click", async () => {
+  if (zoom + ZOOM_STEP <= MAX_ZOOM) {
+    zoom = Number((zoom + ZOOM_STEP).toFixed(2));
+    await rebuildFlipbook();
+  }
+});
+
+zoomOutBtn.addEventListener("click", async () => {
+  if (zoom - ZOOM_STEP >= MIN_ZOOM) {
+    zoom = Number((zoom - ZOOM_STEP).toFixed(2));
+    await rebuildFlipbook();
+  }
+});
+
+fullscreenBtn.addEventListener("click", async () => {
+  if (!document.fullscreenElement) {
+    await flipbookEl.requestFullscreen?.();
+    fullscreenBtn.textContent = "Exit Fullscreen";
+  } else {
+    await document.exitFullscreen?.();
+    fullscreenBtn.textContent = "Fullscreen";
+  }
+});
+
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement) {
+    fullscreenBtn.textContent = "Fullscreen";
+  }
+});
+
+shareBtn.addEventListener("click", async () => {
   const shareData = {
-    title: document.title || "Event Magazine",
-    text: "Check out this magazine.",
-    url: window.location.href, // shares the website link
+    title: document.title,
+    text: "Read this magazine",
+    url: window.location.href
   };
 
   try {
@@ -188,14 +194,32 @@ els.shareBtn.onclick = async () => {
       return;
     }
 
-    // fallback: copy link
-    await navigator.clipboard.writeText(shareData.url);
-    setStatus("Link copied to clipboard.");
-    setTimeout(() => showBook(), 900);
-  } catch (e) {
-    console.warn("Share failed:", e);
-    try { prompt("Copy this link:", shareData.url); } catch {}
-  }
-};
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(shareData.url);
+      setStatus("Link copied to clipboard.");
+      return;
+    }
 
-load();
+    setStatus(`Share this link: ${shareData.url}`);
+  } catch {
+    setStatus("Sharing is unavailable in this browser.");
+  }
+});
+
+// Download action is hard-linked to the PDF file only.
+downloadBtn.addEventListener("click", (event) => {
+  event.stopPropagation();
+});
+
+window.addEventListener("resize", () => {
+  if (!pdfDoc || busy) {
+    return;
+  }
+
+  clearTimeout(window.__resizeTimer);
+  window.__resizeTimer = setTimeout(() => {
+    rebuildFlipbook();
+  }, 160);
+});
+
+loadPdf();

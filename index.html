@@ -1,58 +1,45 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>43A CDO BMT Magazine</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Magazine Flipbook</title>
+    <meta
+      name="description"
+      content="Static flipbook viewer for a single PDF magazine using PDF.js and StPageFlip."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=League+Spartan:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app__header">
+        <h1 class="title">Magazine Flipbook</h1>
+        <p class="subtitle">Interactive page-turn magazine reader</p>
+      </header>
 
-  <!-- Fonts: League Spartan (header), Inter (body) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=League+Spartan:wght@500;600;700&display=swap" rel="stylesheet">
+      <section class="controls" aria-label="Flipbook controls">
+        <button id="prevBtn" type="button">Prev</button>
+        <button id="nextBtn" type="button">Next</button>
+        <button id="zoomOutBtn" type="button">Zoom -</button>
+        <button id="zoomInBtn" type="button">Zoom +</button>
+        <button id="fullscreenBtn" type="button">Fullscreen</button>
+        <button id="shareBtn" type="button">Share</button>
+        <a id="downloadBtn" href="assets/magazine.pdf" download="magazine.pdf">Download PDF</a>
+      </section>
 
-  <link rel="stylesheet" href="styles.css" />
-</head>
+      <section class="viewer-wrap">
+        <div id="status" class="status" role="status" aria-live="polite">Loading PDF…</div>
+        <div id="flipbook" class="flipbook" aria-label="PDF flipbook"></div>
+      </section>
+    </main>
 
-<body>
-  <header class="topbar">
-    <div class="brand">
-      <h1 class="title">Event Magazine</h1>
-      <p class="subtitle">Flip to read</p>
-    </div>
-
-    <div class="controls">
-      <button id="prevBtn" class="btn" aria-label="Previous page">‹</button>
-      <div class="pageReadout">
-        <span id="pageNow">–</span>/<span id="pageTotal">–</span>
-      </div>
-      <button id="nextBtn" class="btn" aria-label="Next page">›</button>
-
-      <button id="zoomOutBtn" class="btn" aria-label="Zoom out">−</button>
-      <button id="zoomInBtn" class="btn" aria-label="Zoom in">+</button>
-
-      <button id="fullscreenBtn" class="btn" aria-label="Toggle full screen">⛶</button>
-      <button id="shareBtn" class="btn" aria-label="Share">Share</button>
-      <a id="downloadBtn" class="btn" href="#" download aria-label="Download PDF">Download</a>
-    </div>
-  </header>
-
-  <main class="stage">
-    <div id="status" class="status">Loading magazine…</div>
-    <div id="bookWrap" class="bookWrap" hidden>
-      <div id="book" class="book" aria-label="Flipbook viewer"></div>
-    </div>
-
-    <noscript class="status">
-      This site needs JavaScript enabled to display the flipbook.
-    </noscript>
-  </main>
-
-  <!-- PDF.js (renders PDF pages to canvas) -->
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.js"></script>
-
-  <!-- StPageFlip (flipbook UI) -->
-  <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
-
-  <script src="app.js"></script>
-</body>
+    <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
+    <script type="module" src="app.js"></script>
+  </body>
 </html>

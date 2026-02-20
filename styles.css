@@ -1,134 +1,143 @@
-:root{
-  --bg: #0b0c10;
-  --panel: rgba(255,255,255,0.06);
-  --text: rgba(255,255,255,0.92);
-  --muted: rgba(255,255,255,0.70);
-  --border: rgba(255,255,255,0.12);
+:root {
+  --bg: #f4f2ed;
+  --panel: #ffffff;
+  --ink: #1f1f1f;
+  --muted: #66605a;
+  --accent: #0f5c4b;
+  --accent-2: #d9ebe5;
+  --border: #d8d3cb;
+  --shadow: 0 20px 40px rgba(22, 22, 22, 0.14);
 }
 
-*{ box-sizing: border-box; }
-html, body{ height: 100%; }
+* {
+  box-sizing: border-box;
+}
 
-body{
+html,
+body {
   margin: 0;
-  background: radial-gradient(1200px 800px at 20% 0%, rgba(255,255,255,0.08), transparent 60%),
-              radial-gradient(1000px 700px at 80% 20%, rgba(255,255,255,0.06), transparent 55%),
-              var(--bg);
-  color: var(--text);
-  font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  min-height: 100%;
 }
 
-.topbar{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--border);
-  background: rgba(0,0,0,0.25);
-  backdrop-filter: blur(10px);
-  position: sticky;
-  top: 0;
-  z-index: 10;
+body {
+  font-family: "Inter", system-ui, -apple-system, Segoe UI, sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 20% 20%, #f8f6f2, transparent 42%),
+    radial-gradient(circle at 85% 0%, #efe8dc, transparent 35%),
+    var(--bg);
 }
 
-.title{
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.2rem;
+}
+
+.app__header {
+  margin-bottom: 1rem;
+}
+
+.title {
   margin: 0;
-  font-family: "League Spartan", system-ui, sans-serif;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  font-size: 22px;
+  font-family: "League Spartan", sans-serif;
+  font-size: clamp(1.9rem, 3.5vw, 3rem);
+  letter-spacing: 0.02em;
 }
 
-.subtitle{
-  margin: 4px 0 0;
+.subtitle {
+  margin: 0.3rem 0 0;
   color: var(--muted);
-  font-size: 13px;
 }
 
-.controls{
+.controls {
   display: flex;
-  align-items: center;
-  gap: 10px;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
 }
 
-.btn{
+.controls button,
+.controls a {
   font-family: "Inter", system-ui, sans-serif;
   font-weight: 600;
-  color: var(--text);
-  background: var(--panel);
   border: 1px solid var(--border);
-  padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: 999px;
+  padding: 0.58rem 0.95rem;
+  background: var(--panel);
+  color: var(--ink);
   cursor: pointer;
-  transition: transform 0.05s ease, background 0.15s ease;
-  user-select: none;
-}
-.btn:hover{ background: rgba(255,255,255,0.10); }
-.btn:active{ transform: translateY(1px); }
-
-a.btn{
   text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease;
 }
 
-.pageReadout{
-  font-family: "Inter", system-ui, sans-serif;
-  color: var(--muted);
-  font-size: 13px;
-  min-width: 70px;
-  text-align: center;
+.controls button:hover,
+.controls a:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent);
 }
 
-.stage{
+.controls button:active,
+.controls a:active {
+  transform: translateY(0);
+}
+
+.viewer-wrap {
   display: grid;
-  place-items: center;
-  padding: 18px;
-  height: calc(100% - 70px);
+  gap: 0.8rem;
 }
 
-.status{
-  font-family: "Inter", system-ui, sans-serif;
+.status {
   color: var(--muted);
-  background: var(--panel);
+  font-size: 0.95rem;
+}
+
+.flipbook {
+  width: min(100%, 1000px);
+  margin: 0 auto;
+  height: min(74vh, 780px);
   border: 1px solid var(--border);
-  padding: 12px 14px;
-  border-radius: 12px;
-  max-width: 720px;
-  text-align: center;
+  border-radius: 20px;
+  background: linear-gradient(165deg, #fff 0%, var(--accent-2) 120%);
+  box-shadow: var(--shadow);
+  padding: 0.8rem;
+  overflow: hidden;
 }
 
-.bookWrap{
-  width: min(1100px, 96vw);
-  height: min(720px, 78vh);
-  display: grid;
-  place-items: center;
+.flip-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #ebe8e2;
 }
 
-.book{
-  width: 100%;
-  height: 100%;
-}
-
-.pageCanvas{
+.flip-page canvas {
   display: block;
   width: 100%;
   height: 100%;
-  background: white;
+  object-fit: contain;
 }
 
-@media (max-width: 740px){
-  .topbar{ align-items: flex-start; }
-  .bookWrap{ height: min(640px, 76vh); }
-}
-
-/* nicer fullscreen experience */
-:fullscreen .bookWrap{
+.flipbook:fullscreen {
   width: 100vw;
   height: 100vh;
-  padding: 10px;
+  max-width: none;
+  border-radius: 0;
+  padding: 1rem;
+}
+
+@media (max-width: 740px) {
+  .app {
+    padding: 0.9rem;
+  }
+
+  .flipbook {
+    height: 70vh;
+    padding: 0.45rem;
+  }
+
+  .controls {
+    gap: 0.45rem;
+  }
 }
