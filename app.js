@@ -1,31 +1,42 @@
 import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.76/pdf.min.mjs";
 
 const PDF_URL = "assets/magazine.pdf";
-const MIN_ZOOM = 0.6;
-const MAX_ZOOM = 2.6;
-const ZOOM_STEP = 0.2;
+const MIN_GESTURE_SCALE = 1;
+const MAX_GESTURE_SCALE = 3;
 
 const flipbookEl = document.getElementById("flipbook");
+const zoomSurfaceEl = document.getElementById("zoomSurface");
 const statusEl = document.getElementById("status");
-const prevBtn = document.getElementById("prevBtn");
-const nextBtn = document.getElementById("nextBtn");
-const zoomInBtn = document.getElementById("zoomInBtn");
-const zoomOutBtn = document.getElementById("zoomOutBtn");
-const fullscreenBtn = document.getElementById("fullscreenBtn");
 const shareBtn = document.getElementById("shareBtn");
 const downloadBtn = document.getElementById("downloadBtn");
 
 let pdfDoc = null;
 let pageFlip = null;
-let zoom = 1;
 let busy = false;
+let spreadCount = 0;
+
+const gestureState = {
+  scale: 1,
+  tx: 0,
+  ty: 0,
+  startScale: 1,
+  startTx: 0,
+  startTy: 0,
+  startDistance: 0,
+  startCenterX: 0,
+  startCenterY: 0,
+  dragStartX: 0,
+  dragStartY: 0,
+  pinchActive: false,
+  panActive: false
+};
 
 function setStatus(message) {
   statusEl.textContent = message;
 }
 
 function disableControls(disabled) {
-  [prevBtn, nextBtn, zoomInBtn, zoomOutBtn, fullscreenBtn, shareBtn, downloadBtn].forEach((el) => {
+  [shareBtn, downloadBtn].forEach((el) => {
     el.toggleAttribute("disabled", disabled);
     if (el.tagName === "A") {
       el.setAttribute("aria-disabled", String(disabled));
@@ -33,6 +44,44 @@ function disableControls(disabled) {
       el.style.opacity = disabled ? "0.65" : "1";
     }
   });
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getTouchDistance(touchA, touchB) {
+  const dx = touchA.clientX - touchB.clientX;
+  const dy = touchA.clientY - touchB.clientY;
+  return Math.hypot(dx, dy);
+}
+
+function getTouchCenter(touchA, touchB) {
+  return {
+    x: (touchA.clientX + touchB.clientX) / 2,
+    y: (touchA.clientY + touchB.clientY) / 2
+  };
+}
+
+function getPanBounds() {
+  const rect = zoomSurfaceEl.getBoundingClientRect();
+  const maxX = (rect.width * (gestureState.scale - 1)) / 2;
+  const maxY = (rect.height * (gestureState.scale - 1)) / 2;
+  return { maxX, maxY };
+}
+
+function applyGestureTransform() {
+  const { maxX, maxY } = getPanBounds();
+  gestureState.tx = clamp(gestureState.tx, -maxX, maxX);
+  gestureState.ty = clamp(gestureState.ty, -maxY, maxY);
+  flipbookEl.style.transform = `translate(${gestureState.tx}px, ${gestureState.ty}px) scale(${gestureState.scale})`;
+}
+
+function resetGestureTransform() {
+  gestureState.scale = 1;
+  gestureState.tx = 0;
+  gestureState.ty = 0;
+  applyGestureTransform();
 }
 
 function clearFlipbook() {
@@ -43,60 +92,93 @@ function clearFlipbook() {
   flipbookEl.innerHTML = "";
 }
 
-async function renderPdfPages() {
-  const pages = [];
-  const targetHeight = Math.max(640, flipbookEl.clientHeight - 20);
-
-  for (let i = 1; i <= pdfDoc.numPages; i += 1) {
-    const page = await pdfDoc.getPage(i);
-    const viewport = page.getViewport({ scale: 1 });
-    const scale = (targetHeight / viewport.height) * zoom;
-    const scaledViewport = page.getViewport({ scale });
-
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.floor(scaledViewport.width);
-    canvas.height = Math.floor(scaledViewport.height);
-
-    const context = canvas.getContext("2d", { alpha: false });
-    await page.render({ canvasContext: context, viewport: scaledViewport }).promise;
-
-    const pageEl = document.createElement("div");
-    pageEl.className = "flip-page";
-    pageEl.appendChild(canvas);
-    pages.push(pageEl);
-  }
-
-  return pages;
+function createPortraitPage(canvas) {
+  const pageEl = document.createElement("div");
+  pageEl.className = "flip-page";
+  pageEl.appendChild(canvas);
+  return [pageEl];
 }
 
-function initFlipbook(pages) {
-  const firstCanvas = pages[0]?.querySelector("canvas");
-  if (!firstCanvas) {
-    throw new Error("Failed to render PDF pages.");
+function createLandscapeSpreadFromCanvas(canvas) {
+  const imgUrl = canvas.toDataURL("image/jpeg", 0.92);
+
+  const leftEl = document.createElement("div");
+  leftEl.className = "flip-page flip-split left";
+  leftEl.style.backgroundImage = `url(${imgUrl})`;
+
+  const rightEl = document.createElement("div");
+  rightEl.className = "flip-page flip-split right";
+  rightEl.style.backgroundImage = `url(${imgUrl})`;
+
+  return [leftEl, rightEl];
+}
+
+async function renderCanvasForPdfPage(pdfPage) {
+  const rawViewport = pdfPage.getViewport({ scale: 1 });
+  const targetHeight = Math.max(720, zoomSurfaceEl.clientHeight - 40);
+  const scale = targetHeight / rawViewport.height;
+  const viewport = pdfPage.getViewport({ scale });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.floor(viewport.width);
+  canvas.height = Math.floor(viewport.height);
+
+  const context = canvas.getContext("2d", { alpha: false });
+  await pdfPage.render({ canvasContext: context, viewport }).promise;
+  return { canvas, viewport };
+}
+
+async function renderFlipPages() {
+  const renderedPages = [];
+  spreadCount = 0;
+
+  for (let i = 1; i <= pdfDoc.numPages; i += 1) {
+    const pdfPage = await pdfDoc.getPage(i);
+    const { canvas, viewport } = await renderCanvasForPdfPage(pdfPage);
+
+    const isLandscape = viewport.width > viewport.height * 1.1;
+    const htmlPages = isLandscape
+      ? createLandscapeSpreadFromCanvas(canvas)
+      : createPortraitPage(canvas);
+
+    if (isLandscape) {
+      spreadCount += 1;
+    }
+
+    renderedPages.push(...htmlPages);
   }
 
-  const width = firstCanvas.width;
-  const height = firstCanvas.height;
+  return renderedPages;
+}
+
+function initFlipbook(htmlPages) {
+  if (!htmlPages.length) {
+    throw new Error("No pages were rendered from the PDF.");
+  }
 
   pageFlip = new St.PageFlip(flipbookEl, {
-    width,
-    height,
+    width: 1100,
+    height: 780,
     size: "stretch",
     minWidth: 280,
-    minHeight: 320,
-    maxShadowOpacity: 0.28,
+    minHeight: 360,
+    maxWidth: 1800,
+    maxHeight: 1200,
+    maxShadowOpacity: 0.35,
     showCover: true,
     mobileScrollSupport: false,
     usePortrait: true,
-    startPage: 0
+    startPage: 0,
+    swipeDistance: 18,
+    clickEventForward: true
   });
 
-  pageFlip.loadFromHTML(pages);
-  setStatus(`Page 1 / ${pdfDoc.numPages} | Zoom ${Math.round(zoom * 100)}%`);
+  pageFlip.loadFromHTML(htmlPages);
+  setStatus(`Loaded ${pdfDoc.numPages} PDF pages (${spreadCount} landscape spreads).`);
 
   pageFlip.on("flip", (event) => {
     const current = event.data + 1;
-    setStatus(`Page ${current} / ${pdfDoc.numPages} | Zoom ${Math.round(zoom * 100)}%`);
+    setStatus(`Viewing spread page ${current} of ${pageFlip.getPageCount()}.`);
   });
 }
 
@@ -104,18 +186,20 @@ async function rebuildFlipbook() {
   if (busy || !pdfDoc) {
     return;
   }
+
   busy = true;
   disableControls(true);
-  setStatus(`Rendering pages at ${Math.round(zoom * 100)}%…`);
+  setStatus("Rendering magazine pages…");
 
   try {
     const currentPageIndex = pageFlip?.getCurrentPageIndex() ?? 0;
     clearFlipbook();
-    const pages = await renderPdfPages();
-    initFlipbook(pages);
+    const htmlPages = await renderFlipPages();
+    initFlipbook(htmlPages);
+    resetGestureTransform();
 
     if (currentPageIndex > 0) {
-      pageFlip.turnToPage(Math.min(currentPageIndex, pdfDoc.numPages - 1));
+      pageFlip.turnToPage(Math.min(currentPageIndex, pageFlip.getPageCount() - 1));
     }
   } catch (error) {
     console.error(error);
@@ -124,6 +208,84 @@ async function rebuildFlipbook() {
     disableControls(false);
     busy = false;
   }
+}
+
+function initTouchGestures() {
+  zoomSurfaceEl.addEventListener(
+    "touchstart",
+    (event) => {
+      if (event.touches.length === 2) {
+        const [a, b] = event.touches;
+        gestureState.pinchActive = true;
+        gestureState.panActive = false;
+        gestureState.startDistance = getTouchDistance(a, b);
+        const center = getTouchCenter(a, b);
+        gestureState.startCenterX = center.x;
+        gestureState.startCenterY = center.y;
+        gestureState.startScale = gestureState.scale;
+        gestureState.startTx = gestureState.tx;
+        gestureState.startTy = gestureState.ty;
+      } else if (event.touches.length === 1 && gestureState.scale > 1.02) {
+        const touch = event.touches[0];
+        gestureState.panActive = true;
+        gestureState.pinchActive = false;
+        gestureState.dragStartX = touch.clientX - gestureState.tx;
+        gestureState.dragStartY = touch.clientY - gestureState.ty;
+      }
+    },
+    { passive: true }
+  );
+
+  zoomSurfaceEl.addEventListener(
+    "touchmove",
+    (event) => {
+      if (gestureState.pinchActive && event.touches.length === 2) {
+        const [a, b] = event.touches;
+        const currentDistance = getTouchDistance(a, b);
+        const center = getTouchCenter(a, b);
+        const ratio = currentDistance / Math.max(gestureState.startDistance, 1);
+
+        gestureState.scale = clamp(
+          gestureState.startScale * ratio,
+          MIN_GESTURE_SCALE,
+          MAX_GESTURE_SCALE
+        );
+
+        const centerDx = center.x - gestureState.startCenterX;
+        const centerDy = center.y - gestureState.startCenterY;
+        gestureState.tx = gestureState.startTx + centerDx;
+        gestureState.ty = gestureState.startTy + centerDy;
+
+        applyGestureTransform();
+        event.preventDefault();
+      } else if (gestureState.panActive && event.touches.length === 1) {
+        const touch = event.touches[0];
+        gestureState.tx = touch.clientX - gestureState.dragStartX;
+        gestureState.ty = touch.clientY - gestureState.dragStartY;
+        applyGestureTransform();
+        event.preventDefault();
+      }
+    },
+    { passive: false }
+  );
+
+  zoomSurfaceEl.addEventListener(
+    "touchend",
+    (event) => {
+      if (event.touches.length < 2) {
+        gestureState.pinchActive = false;
+      }
+
+      if (event.touches.length === 0) {
+        gestureState.panActive = false;
+      }
+
+      if (gestureState.scale <= 1.01) {
+        resetGestureTransform();
+      }
+    },
+    { passive: true }
+  );
 }
 
 async function loadPdf() {
@@ -142,44 +304,6 @@ async function loadPdf() {
     disableControls(false);
   }
 }
-
-prevBtn.addEventListener("click", () => {
-  pageFlip?.flipPrev();
-});
-
-nextBtn.addEventListener("click", () => {
-  pageFlip?.flipNext();
-});
-
-zoomInBtn.addEventListener("click", async () => {
-  if (zoom + ZOOM_STEP <= MAX_ZOOM) {
-    zoom = Number((zoom + ZOOM_STEP).toFixed(2));
-    await rebuildFlipbook();
-  }
-});
-
-zoomOutBtn.addEventListener("click", async () => {
-  if (zoom - ZOOM_STEP >= MIN_ZOOM) {
-    zoom = Number((zoom - ZOOM_STEP).toFixed(2));
-    await rebuildFlipbook();
-  }
-});
-
-fullscreenBtn.addEventListener("click", async () => {
-  if (!document.fullscreenElement) {
-    await flipbookEl.requestFullscreen?.();
-    fullscreenBtn.textContent = "Exit Fullscreen";
-  } else {
-    await document.exitFullscreen?.();
-    fullscreenBtn.textContent = "Fullscreen";
-  }
-});
-
-document.addEventListener("fullscreenchange", () => {
-  if (!document.fullscreenElement) {
-    fullscreenBtn.textContent = "Fullscreen";
-  }
-});
 
 shareBtn.addEventListener("click", async () => {
   const shareData = {
@@ -219,7 +343,8 @@ window.addEventListener("resize", () => {
   clearTimeout(window.__resizeTimer);
   window.__resizeTimer = setTimeout(() => {
     rebuildFlipbook();
-  }, 160);
+  }, 200);
 });
 
+initTouchGestures();
 loadPdf();

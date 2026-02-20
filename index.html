@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Magazine Flipbook</title>
     <meta
       name="description"
@@ -20,22 +20,19 @@
     <main class="app">
       <header class="app__header">
         <h1 class="title">Magazine Flipbook</h1>
-        <p class="subtitle">Interactive page-turn magazine reader</p>
+        <p class="subtitle">Pinch with two fingers to zoom. Swipe to flip pages.</p>
       </header>
 
       <section class="controls" aria-label="Flipbook controls">
-        <button id="prevBtn" type="button">Prev</button>
-        <button id="nextBtn" type="button">Next</button>
-        <button id="zoomOutBtn" type="button">Zoom -</button>
-        <button id="zoomInBtn" type="button">Zoom +</button>
-        <button id="fullscreenBtn" type="button">Fullscreen</button>
         <button id="shareBtn" type="button">Share</button>
         <a id="downloadBtn" href="assets/magazine.pdf" download="magazine.pdf">Download PDF</a>
       </section>
 
       <section class="viewer-wrap">
         <div id="status" class="status" role="status" aria-live="polite">Loading PDF…</div>
-        <div id="flipbook" class="flipbook" aria-label="PDF flipbook"></div>
+        <div id="zoomSurface" class="zoom-surface">
+          <div id="flipbook" class="flipbook" aria-label="PDF flipbook"></div>
+        </div>
       </section>
     </main>
 
