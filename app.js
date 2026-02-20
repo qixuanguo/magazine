@@ -42,7 +42,8 @@ const gestureState = {
   dragStartX: 0,
   dragStartY: 0,
   pinchActive: false,
-  panActive: false
+  panActive: false,
+  ignoreTouch: false
 };
 
 function setStatus(message) {
@@ -479,9 +480,16 @@ function preventPageZoomOutsideViewer() {
 }
 
 function initTouchGestures() {
+  const isFullscreenControl = (event) => event.target?.closest?.("#fullscreenBtn");
+
   zoomSurfaceEl.addEventListener(
     "touchstart",
     (event) => {
+      gestureState.ignoreTouch = Boolean(isFullscreenControl(event));
+      if (gestureState.ignoreTouch) {
+        return;
+      }
+
       if (event.touches.length === 2) {
         const [a, b] = event.touches;
         gestureState.pinchActive = true;
@@ -517,6 +525,10 @@ function initTouchGestures() {
   zoomSurfaceEl.addEventListener(
     "touchmove",
     (event) => {
+      if (gestureState.ignoreTouch) {
+        return;
+      }
+
       if (gestureState.pinchActive && event.touches.length === 2) {
         const [a, b] = event.touches;
         const currentDistance = getTouchDistance(a, b);
@@ -562,6 +574,14 @@ function initTouchGestures() {
   zoomSurfaceEl.addEventListener(
     "touchend",
     (event) => {
+      if (event.touches.length === 0) {
+        gestureState.ignoreTouch = false;
+      }
+
+      if (gestureState.ignoreTouch) {
+        return;
+      }
+
       if (event.touches.length < 2) {
         gestureState.pinchActive = false;
       }
