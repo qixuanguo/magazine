@@ -8,7 +8,8 @@ const ZOOM_LOCK_THRESHOLD = 1.03;
 const MIN_RENDER_DENSITY = 2;
 const MAX_RENDER_DENSITY = 4;
 const RENDER_DENSITY_MULTIPLIER = 1.55;
-const SEAM_OVERLAP_PX = 2;
+const PAGE_BG_COLOR = "#0f1624";
+const IS_COARSE_POINTER = window.matchMedia("(pointer: coarse)").matches;
 
 const flipbookEl = document.getElementById("flipbook");
 const zoomSurfaceEl = document.getElementById("zoomSurface");
@@ -137,21 +138,20 @@ function makeCanvas(width, height) {
 }
 
 function splitLandscapeToA4Canvases(sourceCanvas) {
-  const overlap = Math.max(SEAM_OVERLAP_PX, Math.round((window.devicePixelRatio || 1) * SEAM_OVERLAP_PX));
   const center = Math.floor(sourceCanvas.width / 2);
-  const leftWidth = Math.min(sourceCanvas.width, center + overlap);
-  const rightX = Math.max(0, center - overlap);
+  const leftWidth = center;
+  const rightX = center;
   const rightWidth = sourceCanvas.width - rightX;
 
   const leftCanvas = makeCanvas(leftWidth, sourceCanvas.height);
   const leftContext = leftCanvas.getContext("2d", { alpha: false });
-  leftContext.fillStyle = "#ffffff";
+  leftContext.fillStyle = PAGE_BG_COLOR;
   leftContext.fillRect(0, 0, leftCanvas.width, leftCanvas.height);
   leftContext.drawImage(sourceCanvas, 0, 0, leftWidth, sourceCanvas.height, 0, 0, leftWidth, sourceCanvas.height);
 
   const rightCanvas = makeCanvas(rightWidth, sourceCanvas.height);
   const rightContext = rightCanvas.getContext("2d", { alpha: false });
-  rightContext.fillStyle = "#ffffff";
+  rightContext.fillStyle = PAGE_BG_COLOR;
   rightContext.fillRect(0, 0, rightCanvas.width, rightCanvas.height);
   rightContext.drawImage(
     sourceCanvas,
@@ -181,7 +181,7 @@ async function renderSourceCanvas(pdfPage) {
   const context = canvas.getContext("2d", { alpha: false });
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
-  context.fillStyle = "#ffffff";
+  context.fillStyle = PAGE_BG_COLOR;
   context.fillRect(0, 0, canvas.width, canvas.height);
 
   await pdfPage.render({ canvasContext: context, viewport: renderViewport }).promise;
@@ -300,9 +300,9 @@ function initFlipbook(displayPages, pageMap) {
     mobileScrollSupport: false,
     usePortrait: true,
     startPage: 1,
-    swipeDistance: 110,
-    clickEventForward: false,
-    disableFlipByClick: true,
+    swipeDistance: IS_COARSE_POINTER ? 28 : 44,
+    clickEventForward: true,
+    disableFlipByClick: false,
     showPageCorners: false,
     flippingTime: 560
   });
