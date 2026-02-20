@@ -4,7 +4,11 @@ const PDF_URL = "assets/magazine.pdf";
 const LANDSCAPE_RATIO = 1.08;
 const MIN_GESTURE_SCALE = 1;
 const MAX_GESTURE_SCALE = 3;
-const ZOOM_LOCK_THRESHOLD = 1.02;
+const ZOOM_LOCK_THRESHOLD = 1.03;
+const MIN_RENDER_DENSITY = 2;
+const MAX_RENDER_DENSITY = 4;
+const RENDER_DENSITY_MULTIPLIER = 1.55;
+const SEAM_OVERLAP_PX = 2;
 
 const flipbookEl = document.getElementById("flipbook");
 const zoomSurfaceEl = document.getElementById("zoomSurface");
@@ -16,9 +20,10 @@ let pdfDoc = null;
 let pageFlip = null;
 let busy = false;
 let spreadCount = 0;
-let physicalPageCount = 0;
+let totalBookPages = 0;
 let pageWidth = 595;
 let pageHeight = 842;
+let pageNumberMap = [];
 
 const gestureState = {
   scale: 1,
@@ -56,6 +61,11 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+function getRenderDensity() {
+  const dpr = window.devicePixelRatio || 1;
+  return clamp(dpr * RENDER_DENSITY_MULTIPLIER, MIN_RENDER_DENSITY, MAX_RENDER_DENSITY);
+}
+
 function getTouchDistance(touchA, touchB) {
   const dx = touchA.clientX - touchB.clientX;
   const dy = touchA.clientY - touchB.clientY;
@@ -77,7 +87,9 @@ function getPanBounds() {
 }
 
 function updateZoomStateClass() {
-  flipbookEl.classList.toggle("is-zoomed", gestureState.scale > ZOOM_LOCK_THRESHOLD);
+  const zoomLocked = gestureState.scale > ZOOM_LOCK_THRESHOLD;
+  flipbookEl.classList.toggle("is-zoomed", zoomLocked);
+  zoomSurfaceEl.classList.toggle("is-gesture-locked", zoomLocked);
 }
 
 function applyGestureTransform() {
@@ -111,127 +123,198 @@ function createPageElementFromCanvas(canvas) {
   return pageEl;
 }
 
+function createBlankPageElement() {
+  const pageEl = document.createElement("div");
+  pageEl.className = "flip-page flip-page--blank";
+  return pageEl;
+}
+
+function makeCanvas(width, height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.floor(width));
+  canvas.height = Math.max(1, Math.floor(height));
+  return canvas;
+}
+
 function splitLandscapeToA4Canvases(sourceCanvas) {
-  const halfWidth = Math.floor(sourceCanvas.width / 2);
-  const rightWidth = sourceCanvas.width - halfWidth;
-  const height = sourceCanvas.height;
+  const overlap = Math.max(SEAM_OVERLAP_PX, Math.round((window.devicePixelRatio || 1) * SEAM_OVERLAP_PX));
+  const center = Math.floor(sourceCanvas.width / 2);
+  const leftWidth = Math.min(sourceCanvas.width, center + overlap);
+  const rightX = Math.max(0, center - overlap);
+  const rightWidth = sourceCanvas.width - rightX;
 
-  const leftCanvas = document.createElement("canvas");
-  leftCanvas.width = halfWidth;
-  leftCanvas.height = height;
+  const leftCanvas = makeCanvas(leftWidth, sourceCanvas.height);
   const leftContext = leftCanvas.getContext("2d", { alpha: false });
-  leftContext.drawImage(sourceCanvas, 0, 0, halfWidth, height, 0, 0, halfWidth, height);
+  leftContext.fillStyle = "#ffffff";
+  leftContext.fillRect(0, 0, leftCanvas.width, leftCanvas.height);
+  leftContext.drawImage(sourceCanvas, 0, 0, leftWidth, sourceCanvas.height, 0, 0, leftWidth, sourceCanvas.height);
 
-  const rightCanvas = document.createElement("canvas");
-  rightCanvas.width = rightWidth;
-  rightCanvas.height = height;
+  const rightCanvas = makeCanvas(rightWidth, sourceCanvas.height);
   const rightContext = rightCanvas.getContext("2d", { alpha: false });
+  rightContext.fillStyle = "#ffffff";
+  rightContext.fillRect(0, 0, rightCanvas.width, rightCanvas.height);
   rightContext.drawImage(
     sourceCanvas,
-    halfWidth,
+    rightX,
     0,
     rightWidth,
-    height,
+    sourceCanvas.height,
     0,
     0,
     rightWidth,
-    height
+    sourceCanvas.height
   );
 
   return [leftCanvas, rightCanvas];
 }
 
 async function renderSourceCanvas(pdfPage) {
-  const baseViewport = pdfPage.getViewport({ scale: 1 });
-  const targetHeight = Math.max(420, zoomSurfaceEl.clientHeight - 24);
-  const scale = targetHeight / baseViewport.height;
-  const viewport = pdfPage.getViewport({ scale });
+  const sourceViewport = pdfPage.getViewport({ scale: 1 });
+  const targetDisplayHeight = Math.max(440, zoomSurfaceEl.clientHeight - 20);
+  const displayScale = targetDisplayHeight / sourceViewport.height;
+  const displayViewport = pdfPage.getViewport({ scale: displayScale });
 
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.floor(viewport.width);
-  canvas.height = Math.floor(viewport.height);
+  const renderScale = displayScale * getRenderDensity();
+  const renderViewport = pdfPage.getViewport({ scale: renderScale });
 
+  const canvas = makeCanvas(renderViewport.width, renderViewport.height);
   const context = canvas.getContext("2d", { alpha: false });
-  await pdfPage.render({ canvasContext: context, viewport }).promise;
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
 
-  return { canvas, viewport };
+  await pdfPage.render({ canvasContext: context, viewport: renderViewport }).promise;
+
+  return {
+    canvas,
+    sourceWidth: sourceViewport.width,
+    sourceHeight: sourceViewport.height,
+    displayWidth: displayViewport.width,
+    displayHeight: displayViewport.height
+  };
 }
 
 async function renderBookPages() {
-  const htmlPages = [];
+  const physicalPages = [];
+  const physicalPageMap = [];
   spreadCount = 0;
-  physicalPageCount = 0;
-  pageWidth = 595;
-  pageHeight = 842;
 
   for (let pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber += 1) {
     const pdfPage = await pdfDoc.getPage(pageNumber);
-    const { canvas, viewport } = await renderSourceCanvas(pdfPage);
+    const rendered = await renderSourceCanvas(pdfPage);
 
     const forcePortrait = pageNumber === 1 || pageNumber === pdfDoc.numPages;
-    const isLandscapeSource = !forcePortrait && viewport.width > viewport.height * LANDSCAPE_RATIO;
+    const isLandscapeSource =
+      !forcePortrait && rendered.sourceWidth > rendered.sourceHeight * LANDSCAPE_RATIO;
 
     if (isLandscapeSource) {
-      const [leftCanvas, rightCanvas] = splitLandscapeToA4Canvases(canvas);
-
-      if (physicalPageCount === 0) {
-        pageWidth = leftCanvas.width;
-        pageHeight = leftCanvas.height;
-      }
-
-      htmlPages.push(createPageElementFromCanvas(leftCanvas));
-      htmlPages.push(createPageElementFromCanvas(rightCanvas));
-      physicalPageCount += 2;
+      const [leftCanvas, rightCanvas] = splitLandscapeToA4Canvases(rendered.canvas);
       spreadCount += 1;
+
+      physicalPages.push({
+        element: createPageElementFromCanvas(leftCanvas),
+        width: rendered.displayWidth / 2,
+        height: rendered.displayHeight
+      });
+      physicalPageMap.push(physicalPageMap.length + 1);
+
+      physicalPages.push({
+        element: createPageElementFromCanvas(rightCanvas),
+        width: rendered.displayWidth / 2,
+        height: rendered.displayHeight
+      });
+      physicalPageMap.push(physicalPageMap.length + 1);
+
       continue;
     }
 
-    if (physicalPageCount === 0) {
-      pageWidth = canvas.width;
-      pageHeight = canvas.height;
-    }
-
-    htmlPages.push(createPageElementFromCanvas(canvas));
-    physicalPageCount += 1;
+    physicalPages.push({
+      element: createPageElementFromCanvas(rendered.canvas),
+      width: rendered.displayWidth,
+      height: rendered.displayHeight
+    });
+    physicalPageMap.push(physicalPageMap.length + 1);
   }
 
-  return htmlPages;
+  if (!physicalPages.length) {
+    return { displayPages: [], pageMap: [] };
+  }
+
+  totalBookPages = physicalPages.length;
+  pageWidth = Math.round(physicalPages[0].width);
+  pageHeight = Math.round(physicalPages[0].height);
+
+  const displayPages = [createBlankPageElement()];
+  const map = [0];
+
+  physicalPages.forEach((page, index) => {
+    displayPages.push(page.element);
+    map.push(physicalPageMap[index]);
+  });
+
+  if (displayPages.length % 2 !== 0) {
+    displayPages.push(createBlankPageElement());
+    map.push(0);
+  }
+
+  return { displayPages, pageMap: map };
 }
 
-function initFlipbook(htmlPages) {
-  if (!htmlPages.length) {
+function getStatusForDisplayIndex(index) {
+  const pageNo = pageNumberMap[index] || 0;
+  if (pageNo === 0) {
+    for (let i = index; i >= 0; i -= 1) {
+      if (pageNumberMap[i] > 0) {
+        return `Page ${pageNumberMap[i]} / ${totalBookPages}`;
+      }
+    }
+    for (let i = index + 1; i < pageNumberMap.length; i += 1) {
+      if (pageNumberMap[i] > 0) {
+        return `Page ${pageNumberMap[i]} / ${totalBookPages}`;
+      }
+    }
+    return `Page 1 / ${totalBookPages}`;
+  }
+  return `Page ${pageNo} / ${totalBookPages}`;
+}
+
+function initFlipbook(displayPages, pageMap) {
+  if (!displayPages.length) {
     throw new Error("No pages were rendered from the PDF.");
   }
+
+  pageNumberMap = pageMap;
 
   pageFlip = new St.PageFlip(flipbookEl, {
     width: pageWidth,
     height: pageHeight,
     size: "stretch",
-    minWidth: Math.max(170, Math.floor(pageWidth * 0.36)),
-    maxWidth: Math.max(720, Math.floor(pageWidth * 1.9)),
+    minWidth: Math.max(170, Math.floor(pageWidth * 0.34)),
+    maxWidth: Math.max(780, Math.floor(pageWidth * 1.95)),
     minHeight: Math.max(240, Math.floor(pageHeight * 0.44)),
-    maxHeight: Math.max(960, Math.floor(pageHeight * 1.5)),
-    maxShadowOpacity: 0.32,
-    showCover: true,
+    maxHeight: Math.max(980, Math.floor(pageHeight * 1.55)),
+    showCover: false,
+    drawShadow: false,
+    maxShadowOpacity: 0,
     mobileScrollSupport: false,
     usePortrait: true,
-    startPage: 0,
-    swipeDistance: 72,
+    startPage: 1,
+    swipeDistance: 110,
     clickEventForward: false,
+    disableFlipByClick: true,
     showPageCorners: false,
-    flippingTime: 620
+    flippingTime: 560
   });
 
-  pageFlip.loadFromHTML(htmlPages);
+  pageFlip.loadFromHTML(displayPages);
 
   setStatus(
-    `Loaded ${physicalPageCount} book pages from ${pdfDoc.numPages} PDF pages (${spreadCount} landscape spreads split).`
+    `Loaded ${totalBookPages} book pages from ${pdfDoc.numPages} PDF pages (${spreadCount} A3 spreads split).`
   );
 
   pageFlip.on("flip", (event) => {
-    const currentPage = event.data + 1;
-    const totalPages = pageFlip.getPageCount();
-    setStatus(`Page ${currentPage} / ${totalPages}`);
+    setStatus(getStatusForDisplayIndex(event.data));
   });
 }
 
@@ -242,17 +325,19 @@ async function rebuildFlipbook() {
 
   busy = true;
   disableControls(true);
-  setStatus("Rendering pages…");
+  setStatus("Rendering pages in high quality…");
 
   try {
-    const currentPageIndex = pageFlip?.getCurrentPageIndex() ?? 0;
+    const previousDisplayIndex = pageFlip?.getCurrentPageIndex() ?? 1;
     clearFlipbook();
-    const htmlPages = await renderBookPages();
-    initFlipbook(htmlPages);
+
+    const { displayPages, pageMap } = await renderBookPages();
+    initFlipbook(displayPages, pageMap);
     resetGestureTransform();
 
-    if (currentPageIndex > 0) {
-      pageFlip.turnToPage(Math.min(currentPageIndex, pageFlip.getPageCount() - 1));
+    if (pageFlip && previousDisplayIndex > 0) {
+      pageFlip.turnToPage(Math.min(previousDisplayIndex, pageFlip.getPageCount() - 1));
+      setStatus(getStatusForDisplayIndex(pageFlip.getCurrentPageIndex()));
     }
   } catch (error) {
     console.error(error);
@@ -282,7 +367,10 @@ function initTouchGestures() {
 
         event.preventDefault();
         event.stopPropagation();
-      } else if (event.touches.length === 1 && gestureState.scale > ZOOM_LOCK_THRESHOLD) {
+        return;
+      }
+
+      if (event.touches.length === 1 && gestureState.scale > ZOOM_LOCK_THRESHOLD) {
         const touch = event.touches[0];
         gestureState.panActive = true;
         gestureState.pinchActive = false;
