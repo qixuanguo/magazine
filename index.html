@@ -18,21 +18,27 @@
   </head>
   <body>
     <main class="app">
-      <header class="app__header">
-        <h1 class="title">Magazine Flipbook</h1>
-        <p class="subtitle">Pinch with two fingers to zoom. Swipe to flip pages.</p>
-      </header>
-
-      <section class="controls" aria-label="Flipbook controls">
-        <button id="shareBtn" type="button">Share</button>
-        <a id="downloadBtn" href="assets/magazine.pdf" download="magazine.pdf">Download PDF</a>
-      </section>
-
       <section class="viewer-wrap">
         <div id="status" class="status" role="status" aria-live="polite">Loading PDF…</div>
         <div id="zoomSurface" class="zoom-surface">
           <div id="flipbook" class="flipbook" aria-label="PDF flipbook"></div>
         </div>
+      </section>
+
+      <section class="meta">
+        <h1 class="title">Magazine Flipbook</h1>
+        <p class="subtitle">Pinch with two fingers to zoom. Swipe only when unzoomed.</p>
+
+        <section class="controls" aria-label="Flipbook controls">
+          <button id="shareBtn" class="control-btn" type="button">share</button>
+          <a
+            id="downloadBtn"
+            class="control-btn"
+            href="assets/magazine.pdf"
+            download="magazine.pdf"
+            >download</a
+          >
+        </section>
       </section>
     </main>
 
