@@ -52,6 +52,21 @@ function setStatus(message) {
   statusEl.textContent = message;
 }
 
+function syncViewportMetrics() {
+  const viewportWidth = Math.round(window.visualViewport?.width || window.innerWidth || 0);
+  const viewportHeight = Math.round(window.visualViewport?.height || window.innerHeight || 0);
+  const orientation = viewportWidth > viewportHeight ? "landscape" : "portrait";
+
+  document.documentElement.style.setProperty("--phone-vw", `${viewportWidth}px`);
+  document.documentElement.style.setProperty("--phone-vh", `${viewportHeight}px`);
+
+  if (IS_COARSE_POINTER) {
+    document.documentElement.classList.add("is-phone");
+    document.documentElement.classList.toggle("is-landscape", orientation === "landscape");
+    document.documentElement.classList.toggle("is-portrait", orientation === "portrait");
+  }
+}
+
 function disableControls(disabled) {
   [shareBtn, downloadBtn].forEach((el) => {
     el.toggleAttribute("disabled", disabled);
@@ -384,6 +399,7 @@ function scheduleRebuild(delay = 220) {
       return;
     }
 
+    syncViewportMetrics();
     rebuildFlipbook();
   }, delay);
 }
@@ -561,21 +577,33 @@ downloadBtn.addEventListener("click", (event) => {
 });
 
 window.addEventListener("resize", () => {
+  syncViewportMetrics();
   scheduleRebuild(230);
 });
 
 window.addEventListener("orientationchange", () => {
   resetGestureTransform();
+  syncViewportMetrics();
   clearTimeout(orientationTimerId);
+
+  if (IS_COARSE_POINTER) {
+    orientationTimerId = setTimeout(() => {
+      window.location.reload();
+    }, 160);
+    return;
+  }
+
   orientationTimerId = setTimeout(() => {
     scheduleRebuild(130);
   }, 130);
 });
 
 window.visualViewport?.addEventListener("resize", () => {
+  syncViewportMetrics();
   scheduleRebuild(240);
 });
 
 initTouchGestures();
 showInstructionPopup();
+syncViewportMetrics();
 loadPdf();
