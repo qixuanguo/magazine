@@ -11,13 +11,5 @@ Specially made for one event that displays a single PDF.
   - Headings: League Spartan
   - Body: Inter
 
-## Project Structure
-.
-├── index.html
-├── styles.css
-├── app.js
-└── assets/
-    └── magazine.pdf
-
 ## License
 Use freely for event and personal projects. Add your own license if needed.
