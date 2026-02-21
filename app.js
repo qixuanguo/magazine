@@ -255,22 +255,13 @@ async function renderBookPages() {
   pageWidth = Math.round(physicalPages[0].width);
   pageHeight = Math.round(physicalPages[0].height);
 
-  const displayPages = [createBlankPageElement()];
-  const map = [0];
+  const displayPages = [];
+  const map = [];
 
   physicalPages.forEach((page, index) => {
     displayPages.push(page.element);
     map.push(physicalPageMap[index]);
   });
-
-  // Always keep a blank guard page at the back edge, so first/last flips behave like a real book.
-  displayPages.push(createBlankPageElement());
-  map.push(0);
-
-  if (displayPages.length % 2 !== 0) {
-    displayPages.push(createBlankPageElement());
-    map.push(0);
-  }
 
   return { displayPages, pageMap: map };
 }
@@ -308,12 +299,12 @@ function initFlipbook(displayPages, pageMap) {
     maxWidth: Math.max(780, Math.floor(pageWidth * 1.95)),
     minHeight: Math.max(240, Math.floor(pageHeight * 0.44)),
     maxHeight: Math.max(980, Math.floor(pageHeight * 1.55)),
-    showCover: false,
+    showCover: true,
     drawShadow: false,
     maxShadowOpacity: 0,
     mobileScrollSupport: false,
     usePortrait: true,
-    startPage: 1,
+    startPage: 0,
     swipeDistance: IS_COARSE_POINTER ? 28 : 44,
     clickEventForward: true,
     disableFlipByClick: false,
@@ -342,7 +333,7 @@ async function rebuildFlipbook() {
   setStatus("Rendering pages in high quality…");
 
   try {
-    const previousDisplayIndex = pageFlip?.getCurrentPageIndex() ?? 1;
+    const previousDisplayIndex = pageFlip?.getCurrentPageIndex() ?? 0;
     clearFlipbook();
 
     const { displayPages, pageMap } = await renderBookPages();
