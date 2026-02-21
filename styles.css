@@ -119,7 +119,14 @@ body.has-fullscreen-fallback {
 }
 
 .meta {
-  margin-top: 2.1rem;
+  margin-top: 1.2rem;
+}
+
+.meta-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
 }
 
 .title {
@@ -165,23 +172,6 @@ body.has-fullscreen-fallback {
 
 .control-btn:active {
   transform: translateY(0);
-}
-
-.viewer-fallback-wrap {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 0.36rem;
-}
-
-.fallback-btn {
-  border-color: #456b97;
-  background: #22344f;
-  color: #e9f2ff;
-}
-
-.fallback-btn:hover {
-  border-color: #6a99cc;
-  background: #2b4264;
 }
 
 .viewer-fullscreen-btn {
@@ -243,6 +233,20 @@ body.has-fullscreen-fallback {
   font-size: 0.85rem;
 }
 
+.deep-end {
+  min-height: 34vh;
+  padding-bottom: max(1.1rem, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.deep-end__giraffe {
+  display: inline-block;
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
 @media (max-width: 760px) {
   .app {
     padding: 0.6rem;
@@ -261,10 +265,6 @@ body.has-fullscreen-fallback {
 
   .meta {
     margin-top: 1.55rem;
-  }
-
-  .viewer-fallback-wrap {
-    margin-top: 0.3rem;
   }
 }
 
@@ -309,9 +309,5 @@ body.has-fullscreen-fallback {
   .instruction-popup {
     bottom: 0.6rem;
     width: min(92vw, 480px);
-  }
-
-  .viewer-fallback-wrap {
-    margin-top: 0.26rem;
   }
 }

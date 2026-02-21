@@ -11,6 +11,11 @@
       name="description"
       content="Static flipbook viewer for a single PDF magazine using PDF.js and StPageFlip."
     />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ctext y="0.9em" font-size="90"%3E🦒%3C/text%3E%3C/svg%3E'
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -30,20 +35,20 @@
           </button>
         </div>
       </section>
-      <section class="viewer-fallback-wrap" aria-label="Viewer fallback">
-        <a
-          id="fallbackBtn"
-          class="control-btn fallback-btn"
-          href="https://www.canva.com/design/DAHA094uUoI/FmB6O72kj8qWllgAU7Dmtw/edit?utm_content=DAHA094uUoI&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton"
-          target="_blank"
-          rel="noopener noreferrer"
-          >if unable to view, press me</a
-        >
-      </section>
 
       <section class="meta">
-        <h1 class="title">43A CDO BMT Magazine</h1>
-        <p class="subtitle">Swipe to flip, pinch to zoom, and zoom out to original size before flipping.</p>
+        <div class="meta-head">
+          <h1 class="title">43A CDO BMT Magazine</h1>
+          <a
+            id="fallbackBtn"
+            class="control-btn"
+            href="https://www.canva.com/design/DAHA094uUoI/FmB6O72kj8qWllgAU7Dmtw/edit?utm_content=DAHA094uUoI&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton"
+            target="_blank"
+            rel="noopener noreferrer"
+            >if unable to view, press me</a
+          >
+        </div>
+        <p class="subtitle">Pinch to zoom, zoom out to original size before flipping.</p>
 
         <section class="controls" aria-label="Flipbook controls">
           <button id="shareBtn" class="control-btn" type="button">share</button>
@@ -58,6 +63,10 @@
       </section>
     </main>
 
+    <footer class="deep-end" aria-hidden="true">
+      <span class="deep-end__giraffe">🦒</span>
+    </footer>
+
     <div id="instructionPopup" class="instruction-popup" role="status" aria-live="polite">
       <button
         id="instructionCloseBtn"
@@ -67,7 +76,7 @@
       >
         close
       </button>
-      <p class="instruction-text">Zoom out to original size before flipping pages.</p>
+      <p class="instruction-text">Welcome to the CDO BMT Graduation Parade of the Forty-Third Alpha Batch.<br>To flip pages, zoom the magazine out to the original size.<br>If the magazine does not load, press the "if unable to load, press me" button.<br>We hope you enjoy this special occasion.</p>
       <p class="instruction-countdown">Closing in <span id="instructionCountdown">5</span>s</p>
     </div>
 
