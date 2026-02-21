@@ -1,6 +1,6 @@
 # Event Magazine Flipbook
 
-A static website that displays **one PDF magazine** in a **flipbook/page-turn** viewer 
+A static website that displays **one PDF magazine** in a **flipbook/page-turn** viewer. 
 Specially made for one event that displays a single PDF.
 
 ## Features
