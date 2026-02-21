@@ -167,6 +167,23 @@ body.has-fullscreen-fallback {
   transform: translateY(0);
 }
 
+.viewer-fallback-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.36rem;
+}
+
+.fallback-btn {
+  border-color: #456b97;
+  background: #22344f;
+  color: #e9f2ff;
+}
+
+.fallback-btn:hover {
+  border-color: #6a99cc;
+  background: #2b4264;
+}
+
 .viewer-fullscreen-btn {
   position: absolute;
   right: 0.68rem;
@@ -245,6 +262,10 @@ body.has-fullscreen-fallback {
   .meta {
     margin-top: 1.55rem;
   }
+
+  .viewer-fallback-wrap {
+    margin-top: 0.3rem;
+  }
 }
 
 @media (max-width: 560px) {
@@ -288,5 +309,9 @@ body.has-fullscreen-fallback {
   .instruction-popup {
     bottom: 0.6rem;
     width: min(92vw, 480px);
+  }
+
+  .viewer-fallback-wrap {
+    margin-top: 0.26rem;
   }
 }
