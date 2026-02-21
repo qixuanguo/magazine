@@ -263,6 +263,10 @@ async function renderBookPages() {
     map.push(physicalPageMap[index]);
   });
 
+  // Always keep a blank guard page at the back edge, so first/last flips behave like a real book.
+  displayPages.push(createBlankPageElement());
+  map.push(0);
+
   if (displayPages.length % 2 !== 0) {
     displayPages.push(createBlankPageElement());
     map.push(0);
